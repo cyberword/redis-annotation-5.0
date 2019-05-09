@@ -1,6 +1,7 @@
 .*.swp
 *.o
 *.log
+.vscode
 dump.rdb
 redis-benchmark
 redis-check-aof

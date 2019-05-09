@@ -2211,22 +2211,23 @@ void initServerConfig(void) {
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
+    /** 设置服务端的执行频率默认设置10,也就是说1000ms执行10次每100ms执行一次 **/
     server.hz = server.config_hz = CONFIG_DEFAULT_HZ;
     server.dynamic_hz = CONFIG_DEFAULT_DYNAMIC_HZ;
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
-    server.port = CONFIG_DEFAULT_SERVER_PORT;
-    server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;
+    server.port = CONFIG_DEFAULT_SERVER_PORT;//默认端口6397
+    server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;//连接队列大小
     server.bindaddr_count = 0;
     server.unixsocket = NULL;
     server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
-    server.ipfd_count = 0;
+    server.ipfd_count = 0;//描述符数量
     server.sofd = -1;
     server.protected_mode = CONFIG_DEFAULT_PROTECTED_MODE;
     server.gopher_enabled = CONFIG_DEFAULT_GOPHER_ENABLED;
-    server.dbnum = CONFIG_DEFAULT_DBNUM;
-    server.verbosity = CONFIG_DEFAULT_VERBOSITY;
-    server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
-    server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
+    server.dbnum = CONFIG_DEFAULT_DBNUM;//默认一个服务端16个db
+    server.verbosity = CONFIG_DEFAULT_VERBOSITY;//日志级别
+    server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;//最大闲置时间
+    server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;//tcpkeepalive时间
     server.active_expire_enabled = 1;
     server.active_defrag_enabled = CONFIG_DEFAULT_ACTIVE_DEFRAG;
     server.active_defrag_ignore_bytes = CONFIG_DEFAULT_DEFRAG_IGNORE_BYTES;
@@ -2317,7 +2318,7 @@ void initServerConfig(void) {
     server.io_threads_num = CONFIG_DEFAULT_IO_THREADS_NUM;
     server.io_threads_do_reads = CONFIG_DEFAULT_IO_THREADS_DO_READS;
 
-    server.lruclock = getLRUClock();
+    server.lruclock = getLRUClock();//lru时钟
     resetServerSaveParams();
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
@@ -4582,7 +4583,7 @@ void loadDataFromDisk(void) {
         }
     }
 }
-
+/**   OOM的处理函数        **/
 void redisOutOfMemoryHandler(size_t allocation_size) {
     serverLog(LL_WARNING,"Out Of Memory allocating %zu bytes!",
         allocation_size);
@@ -4700,7 +4701,11 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
-
+/**
+ * 
+ * redis服务端入口
+ * 
+ * */
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
@@ -4739,7 +4744,7 @@ int main(int argc, char **argv) {
 #endif
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
-    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);//设置OOM处理函数
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
 
@@ -4747,7 +4752,7 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();
+    initServerConfig();//初始化服务端配置
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
     moduleInitModulesSystem();
