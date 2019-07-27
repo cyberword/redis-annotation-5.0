@@ -46,8 +46,4 @@ unsigned int zipmapLen(unsigned char *zm);
 size_t zipmapBlobLen(unsigned char *zm);
 void zipmapRepr(unsigned char *p);
 
-#ifdef REDIS_TEST
-int zipmapTest(int argc, char *argv[]);
-#endif
-
 #endif

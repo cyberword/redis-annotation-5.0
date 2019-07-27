@@ -34,11 +34,6 @@
 #include <AvailabilityMacros.h>
 #endif
 
-#ifdef __linux__
-#include <linux/version.h>
-#include <features.h>
-#endif
-
 /* Define redis_fstat to fstat or fstat64() */
 #if defined(__APPLE__) && !defined(MAC_OS_X_VERSION_10_6)
 #define redis_fstat fstat64
@@ -53,7 +48,6 @@
 #define HAVE_PROC_STAT 1
 #define HAVE_PROC_MAPS 1
 #define HAVE_PROC_SMAPS 1
-#define HAVE_PROC_SOMAXCONN 1
 #endif
 
 /* Test for task_info() */
@@ -62,15 +56,8 @@
 #endif
 
 /* Test for backtrace() */
-#if defined(__APPLE__) || (defined(__linux__) && defined(__GLIBC__)) || \
-    defined(__FreeBSD__) || (defined(__OpenBSD__) && defined(USE_BACKTRACE))\
- || defined(__DragonFly__)
+#if defined(__APPLE__) || defined(__linux__)
 #define HAVE_BACKTRACE 1
-#endif
-
-/* MSG_NOSIGNAL. */
-#ifdef __linux__
-#define HAVE_MSG_NOSIGNAL 1
 #endif
 
 /* Test for polling API */
@@ -89,16 +76,18 @@
 #endif
 #endif
 
-/* Define redis_fsync to fdatasync() in Linux and fsync() for all the rest */
+/* Define aof_fsync to fdatasync() in Linux and fsync() for all the rest */
 #ifdef __linux__
-#define redis_fsync fdatasync
+#define aof_fsync fdatasync
 #else
-#define redis_fsync fsync
+#define aof_fsync fsync
 #endif
 
 /* Define rdb_fsync_range to sync_file_range() on Linux, otherwise we use
  * the plain fsync() call. */
 #ifdef __linux__
+#include <linux/version.h>
+#include <features.h>
 #if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
 #if (LINUX_VERSION_CODE >= 0x020611 && __GLIBC_PREREQ(2, 6))
 #define HAVE_SYNC_FILE_RANGE 1
@@ -123,7 +112,7 @@
 #define USE_SETPROCTITLE
 #endif
 
-#if ((defined __linux && defined(__GLIBC__)) || defined __APPLE__)
+#if (defined __linux || defined __APPLE__)
 #define USE_SETPROCTITLE
 #define INIT_SETPROCTITLE_REPLACEMENT
 void spt_init(int argc, char *argv[]);
@@ -196,34 +185,11 @@ void setproctitle(const char *fmt, ...);
 #error "Undefined or invalid BYTE_ORDER"
 #endif
 
-#if (__i386 || __amd64 || __powerpc__) && __GNUC__
+#if (__i386 || __amd64) && __GNUC__
 #define GNUC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-#if defined(__clang__)
+#if (GNUC_VERSION >= 40100) || defined(__clang__)
 #define HAVE_ATOMIC
 #endif
-#if (defined(__GLIBC__) && defined(__GLIBC_PREREQ))
-#if (GNUC_VERSION >= 40100 && __GLIBC_PREREQ(2, 6))
-#define HAVE_ATOMIC
-#endif
-#endif
-#endif
-
-/* Make sure we can test for ARM just checking for __arm__, since sometimes
- * __arm is defined but __arm__ is not. */
-#if defined(__arm) && !defined(__arm__)
-#define __arm__
-#endif
-#if defined (__aarch64__) && !defined(__arm64__)
-#define __arm64__
-#endif
-
-/* Make sure we can test for SPARC just checking for __sparc__. */
-#if defined(__sparc) && !defined(__sparc__)
-#define __sparc__
-#endif
-
-#if defined(__sparc__) || defined(__arm__)
-#define USE_ALIGNED_ACCESS
 #endif
 
 #endif

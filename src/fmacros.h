@@ -34,11 +34,6 @@
 
 #if defined(__linux__)
 #define _GNU_SOURCE
-#define _DEFAULT_SOURCE
-#endif
-
-#if defined(_AIX)
-#define _ALL_SOURCE
 #endif
 
 #if defined(__linux__) || defined(__OpenBSD__)
@@ -49,10 +44,6 @@
  */
 #elif !defined(__NetBSD__)
 #define _XOPEN_SOURCE
-#endif
-
-#if defined(__sun)
-#define _POSIX_C_SOURCE 199506L
 #endif
 
 #define _LARGEFILE_SOURCE

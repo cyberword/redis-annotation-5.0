@@ -101,15 +101,11 @@ uint64_t intrev64(uint64_t v) {
     return v;
 }
 
-#ifdef REDIS_TEST
+#ifdef TESTMAIN
 #include <stdio.h>
 
-#define UNUSED(x) (void)(x)
-int endianconvTest(int argc, char *argv[]) {
+int main(void) {
     char buf[32];
-
-    UNUSED(argc);
-    UNUSED(argv);
 
     sprintf(buf,"ciaoroma");
     memrev16(buf);

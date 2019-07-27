@@ -4,7 +4,7 @@ set ::valgrind_errors {}
 
 proc start_server_error {config_file error} {
     set err {}
-    append err "Can't start the Redis server\n"
+    append err "Cant' start the Redis server\n"
     append err "CONFIGURATION:"
     append err [exec cat $config_file]
     append err "\nERROR:"
@@ -54,15 +54,10 @@ proc kill_server config {
 
     # kill server and wait for the process to be totally exited
     catch {exec kill $pid}
-    if {$::valgrind} {
-        set max_wait 60000
-    } else {
-        set max_wait 10000
-    }
     while {[is_alive $config]} {
         incr wait 10
 
-        if {$wait >= $max_wait} {
+        if {$wait >= 5000} {
             puts "Forcing process $pid to exit..."
             catch {exec kill -KILL $pid}
         } elseif {$wait % 1000 == 0} {
@@ -75,9 +70,6 @@ proc kill_server config {
     if {$::valgrind} {
         check_valgrind_errors [dict get $config stderr]
     }
-
-    # Remove this pid from the set of active pids in the test server.
-    send_data_packet $::test_server_fd server-killed $pid
 }
 
 proc is_alive config {
@@ -186,10 +178,10 @@ proc start_server {options {code undefined}} {
             dict set config $directive $arguments
         }
     }
-
+    
     # use a different directory every time a server is started
     dict set config dir [tmpdir server]
-
+    
     # start every server on a different port
     set ::port [find_available_port [expr {$::port+1}]]
     dict set config port $::port
@@ -198,7 +190,7 @@ proc start_server {options {code undefined}} {
     foreach {directive arguments} [concat $::global_overrides $overrides] {
         dict set config $directive $arguments
     }
-
+    
     # write new configuration to temporary file
     set config_file [tmpfile redis.conf]
     set fp [open $config_file w+]
@@ -212,16 +204,11 @@ proc start_server {options {code undefined}} {
     set stderr [format "%s/%s" [dict get $config "dir"] "stderr"]
 
     if {$::valgrind} {
-        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full src/redis-server $config_file > $stdout 2> $stderr &]
-    } elseif ($::stack_logging) {
-        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt src/redis-server $config_file > $stdout 2> $stderr &]
+        exec valgrind --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full src/redis-server $config_file > $stdout 2> $stderr &
     } else {
-        set pid [exec src/redis-server $config_file > $stdout 2> $stderr &]
+        exec src/redis-server $config_file > $stdout 2> $stderr &
     }
-
-    # Tell the test server about this new instance.
-    send_data_packet $::test_server_fd server-spawned $pid
-
+    
     # check that the server actually started
     # ugly but tries to be as fast as possible...
     if {$::valgrind} {set retrynum 1000} else {set retrynum 100}
@@ -246,10 +233,10 @@ proc start_server {options {code undefined}} {
         start_server_error $config_file $err
         return
     }
-
-    # Wait for actual startup
-    while {![info exists _pid]} {
-        regexp {PID:\s(\d+)} [exec cat $stdout] _ _pid
+    
+    # find out the pid
+    while {![info exists pid]} {
+        regexp {\[(\d+)\]} [exec cat $stdout] _ pid
         after 100
     }
 
@@ -276,15 +263,9 @@ proc start_server {options {code undefined}} {
             error_and_quit $config_file $line
         }
 
-        if {$::wait_server} {
-            set msg "server started PID: [dict get $srv "pid"]. press any key to continue..."
-            puts $msg
-            read stdin 1
-        }
-
         while 1 {
             # check that the server actually started and is ready for connections
-            if {[exec grep -i "Ready to accept" | wc -l < $stdout] > 0} {
+            if {[exec grep "ready to accept" | wc -l < $stdout] > 0} {
                 break
             }
             after 10

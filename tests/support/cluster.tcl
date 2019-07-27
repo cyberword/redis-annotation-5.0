@@ -58,8 +58,7 @@ proc ::redis_cluster::__method__refresh_nodes_map {id} {
     set idx 0; # Index of the node that will respond.
     set errmsg {}
     foreach start_node $::redis_cluster::startup_nodes($id) {
-        set ip_port [lindex [split $start_node @] 0]
-        lassign [split $ip_port :] start_host start_port
+        lassign [split $start_node :] start_host start_port
         if {[catch {
             set r {}
             set r [redis $start_host $start_port]
@@ -69,7 +68,7 @@ proc ::redis_cluster::__method__refresh_nodes_map {id} {
             if {$r ne {}} {catch {$r close}}
             incr idx
             if {[string length $errmsg] < 200} {
-                append errmsg " $ip_port: $e"
+                append errmsg " $start_node: $e"
             }
             continue ; # Try next.
         } else {
@@ -99,7 +98,6 @@ proc ::redis_cluster::__method__refresh_nodes_map {id} {
         set args [split $line " "]
         lassign $args nodeid addr flags slaveof pingsent pongrecv configepoch linkstate
         set slots [lrange $args 8 end]
-        set addr [lindex [split $addr @] 0]
         if {$addr eq {:0}} {
             set addr $start_host:$start_port
         }
@@ -228,8 +226,6 @@ proc ::redis_cluster::get_keys_from_command {cmd argv} {
     # Special handling for other commands
     switch -exact $cmd {
         mget {return $argv}
-        eval {return [lrange $argv 2 1+[lindex $argv 1]]}
-        evalsha {return [lrange $argv 2 1+[lindex $argv 1]]}
     }
 
     # All the remaining commands are not handled.

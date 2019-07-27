@@ -91,14 +91,6 @@ proc wait_for_sync r {
     }
 }
 
-proc wait_for_ofs_sync {r1 r2} {
-    wait_for_condition 50 100 {
-        [status $r1 master_repl_offset] eq [status $r2 master_repl_offset]
-    } else {
-        fail "replica didn't sync in time"
-    }
-}
-
 # Random integer between 0 and max (excluded).
 proc randomInt {max} {
     expr {int(rand()*$max)}
@@ -270,50 +262,46 @@ proc formatCommand {args} {
 
 proc csvdump r {
     set o {}
-    for {set db 0} {$db < 16} {incr db} {
-        {*}$r select $db
-        foreach k [lsort [{*}$r keys *]] {
-            set type [{*}$r type $k]
-            append o [csvstring $db] , [csvstring $k] , [csvstring $type] ,
-            switch $type {
-                string {
-                    append o [csvstring [{*}$r get $k]] "\n"
+    foreach k [lsort [{*}$r keys *]] {
+        set type [{*}$r type $k]
+        append o [csvstring $k] , [csvstring $type] ,
+        switch $type {
+            string {
+                append o [csvstring [{*}$r get $k]] "\n"
+            }
+            list {
+                foreach e [{*}$r lrange $k 0 -1] {
+                    append o [csvstring $e] ,
                 }
-                list {
-                    foreach e [{*}$r lrange $k 0 -1] {
-                        append o [csvstring $e] ,
-                    }
-                    append o "\n"
+                append o "\n"
+            }
+            set {
+                foreach e [lsort [{*}$r smembers $k]] {
+                    append o [csvstring $e] ,
                 }
-                set {
-                    foreach e [lsort [{*}$r smembers $k]] {
-                        append o [csvstring $e] ,
-                    }
-                    append o "\n"
+                append o "\n"
+            }
+            zset {
+                foreach e [{*}$r zrange $k 0 -1 withscores] {
+                    append o [csvstring $e] ,
                 }
-                zset {
-                    foreach e [{*}$r zrange $k 0 -1 withscores] {
-                        append o [csvstring $e] ,
-                    }
-                    append o "\n"
+                append o "\n"
+            }
+            hash {
+                set fields [{*}$r hgetall $k]
+                set newfields {}
+                foreach {k v} $fields {
+                    lappend newfields [list $k $v]
                 }
-                hash {
-                    set fields [{*}$r hgetall $k]
-                    set newfields {}
-                    foreach {k v} $fields {
-                        lappend newfields [list $k $v]
-                    }
-                    set fields [lsort -index 0 $newfields]
-                    foreach kv $fields {
-                        append o [csvstring [lindex $kv 0]] ,
-                        append o [csvstring [lindex $kv 1]] ,
-                    }
-                    append o "\n"
+                set fields [lsort -index 0 $newfields]
+                foreach kv $fields {
+                    append o [csvstring [lindex $kv 0]] ,
+                    append o [csvstring [lindex $kv 1]] ,
                 }
+                append o "\n"
             }
         }
     }
-    {*}$r select 9
     return $o
 }
 
@@ -327,14 +315,12 @@ proc roundFloat f {
 
 proc find_available_port start {
     for {set j $start} {$j < $start+1024} {incr j} {
-        if {[catch {set fd1 [socket 127.0.0.1 $j]}] &&
-            [catch {set fd2 [socket 127.0.0.1 [expr $j+10000]]}]} {
+        if {[catch {
+            set fd [socket 127.0.0.1 $j]
+        }]} {
             return $j
         } else {
-            catch {
-                close $fd1
-                close $fd2
-            }
+            close $fd
         }
     }
     if {$j == $start+1024} {
@@ -365,37 +351,9 @@ proc colorstr {color str} {
             default {set colorcode {37}}
         }
         if {$colorcode ne {}} {
-            return "\033\[$b;${colorcode};49m$str\033\[0m"
+            return "\033\[$b;${colorcode};40m$str\033\[0m"
         }
     } else {
         return $str
     }
-}
-
-# Execute a background process writing random data for the specified number
-# of seconds to the specified Redis instance.
-proc start_write_load {host port seconds} {
-    set tclsh [info nameofexecutable]
-    exec $tclsh tests/helpers/gen_write_load.tcl $host $port $seconds &
-}
-
-# Stop a process generating write load executed with start_write_load.
-proc stop_write_load {handle} {
-    catch {exec /bin/kill -9 $handle}
-}
-
-proc K { x y } { set x } 
-
-# Shuffle a list. From Tcl wiki. Originally from Steve Cohen that improved
-# other versions. Code should be under public domain.
-proc lshuffle {list} {
-    set n [llength $list]
-    while {$n>0} {
-        set j [expr {int(rand()*$n)}]
-        lappend slist [lindex $list $j]
-        incr n -1
-        set temp [lindex $list $n]
-        set list [lreplace [K $list [set list {}]] $j $j $temp]
-    }
-    return $slist
 }

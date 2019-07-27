@@ -31,12 +31,11 @@
 void bioInit(void);
 void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3);
 unsigned long long bioPendingJobsOfType(int type);
-unsigned long long bioWaitStepOfType(int type);
+void bioWaitPendingJobsLE(int type, unsigned long long num);
 time_t bioOlderJobOfType(int type);
 void bioKillThreads(void);
 
 /* Background job opcodes */
-#define BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
-#define BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
-#define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
-#define BIO_NUM_OPS       3
+#define REDIS_BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
+#define REDIS_BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
+#define REDIS_BIO_NUM_OPS       2

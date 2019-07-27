@@ -28,8 +28,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(__sun)
-
 #if defined(__GNUC__)
 #include <math.h>
 #undef isnan
@@ -50,5 +48,3 @@
 #define u_int uint
 #define u_int32_t uint32_t
 #endif /* __GNUC__ */
-
-#endif /* __sun */
