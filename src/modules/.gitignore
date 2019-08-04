@@ -1,2 +1,4 @@
 *.so
 *.xo
+CMakeLists.txt
+cmake-build-debug
