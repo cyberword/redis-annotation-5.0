@@ -27,126 +27,134 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __REDIS_RDB_H
-#define __REDIS_RDB_H
+#ifndef __RDB_H
+#define __RDB_H
 
 #include <stdio.h>
 #include "rio.h"
 
 /* TBD: include only necessary headers. */
-#include "redis.h"
+#include "server.h"
 
 /* The current RDB version. When the format changes in a way that is no longer
- * backward compatible this number gets incremented.
- *
- * RDB 的版本，当新版本不向就版本兼容时，增一
- */
-#define REDIS_RDB_VERSION 6
+ * backward compatible this number gets incremented. */
+#define RDB_VERSION 9
 
 /* Defines related to the dump file format. To store 32 bits lengths for short
  * keys requires a lot of space, so we check the most significant 2 bits of
  * the first byte to interpreter the length:
  *
- * 通过读取第一字节的最高 2 位来判断长度
- *
- * 00|000000 => if the two MSB are 00 the len is the 6 bits of this byte
- *              长度编码在这一字节的其余 6 位中
- *
- * 01|000000 00000000 =>  01, the len is 14 byes, 6 bits + 8 bits of next byte
- *                        长度为 14 位，当前字节 6 位，加上下个字节 8 位
- *
- * 10|000000 [32 bit integer] => if it's 01, a full 32 bit len will follow
- *                               长度由后跟的 32 位保存
- *
- * 11|000000 this means: specially encoded object will follow. The six bits
+ * 00|XXXXXX => if the two MSB are 00 the len is the 6 bits of this byte
+ * 01|XXXXXX XXXXXXXX =>  01, the len is 14 byes, 6 bits + 8 bits of next byte
+ * 10|000000 [32 bit integer] => A full 32 bit len in net byte order will follow
+ * 10|000001 [64 bit integer] => A full 64 bit len in net byte order will follow
+ * 11|OBKIND this means: specially encoded object will follow. The six bits
  *           number specify the kind of object that follows.
- *           See the REDIS_RDB_ENC_* defines.
- *           后跟一个特殊编码的对象。字节中的 6 位指定对象的类型。
- *           查看 REDIS_RDB_ENC_* 定义获得更多消息
+ *           See the RDB_ENC_* defines.
  *
- * Lenghts up to 63 are stored using a single byte, most DB keys, and may
- * values, will fit inside. 
- *
- * 一个字节（的其中 6 个字节）可以保存的最大长度是 63 （包括在内），
- * 对于大多数键和值来说，都已经足够了。
- */
-#define REDIS_RDB_6BITLEN 0
-#define REDIS_RDB_14BITLEN 1
-#define REDIS_RDB_32BITLEN 2
-#define REDIS_RDB_ENCVAL 3
-// 表示读取/写入错误
-#define REDIS_RDB_LENERR UINT_MAX
+ * Lengths up to 63 are stored using a single byte, most DB keys, and may
+ * values, will fit inside. */
+#define RDB_6BITLEN 0
+#define RDB_14BITLEN 1
+#define RDB_32BITLEN 0x80
+#define RDB_64BITLEN 0x81
+#define RDB_ENCVAL 3
+#define RDB_LENERR UINT64_MAX
 
 /* When a length of a string object stored on disk has the first two bits
- * set, the remaining two bits specify a special encoding for the object
- * accordingly to the following defines:
- *
- * 当对象是一个字符串对象时，
- * 最高两个位之后的两个位（第 3 个位和第 4 个位）指定了对象的特殊编码
- */
-#define REDIS_RDB_ENC_INT8 0        /* 8 bit signed integer */
-#define REDIS_RDB_ENC_INT16 1       /* 16 bit signed integer */
-#define REDIS_RDB_ENC_INT32 2       /* 32 bit signed integer */
-#define REDIS_RDB_ENC_LZF 3         /* string compressed with FASTLZ */
+ * set, the remaining six bits specify a special encoding for the object
+ * accordingly to the following defines: */
+#define RDB_ENC_INT8 0        /* 8 bit signed integer */
+#define RDB_ENC_INT16 1       /* 16 bit signed integer */
+#define RDB_ENC_INT32 2       /* 32 bit signed integer */
+#define RDB_ENC_LZF 3         /* string compressed with FASTLZ */
 
-/* Dup object types to RDB object types. Only reason is readability (are we
- * dealing with RDB types or with in-memory object types?).
- *
- * 对象类型在 RDB 文件中的类型
- */
-#define REDIS_RDB_TYPE_STRING 0
-#define REDIS_RDB_TYPE_LIST   1
-#define REDIS_RDB_TYPE_SET    2
-#define REDIS_RDB_TYPE_ZSET   3
-#define REDIS_RDB_TYPE_HASH   4
+/* Map object types to RDB object types. Macros starting with OBJ_ are for
+ * memory storage and may change. Instead RDB types must be fixed because
+ * we store them on disk. */
+#define RDB_TYPE_STRING 0
+#define RDB_TYPE_LIST   1
+#define RDB_TYPE_SET    2
+#define RDB_TYPE_ZSET   3
+#define RDB_TYPE_HASH   4
+#define RDB_TYPE_ZSET_2 5 /* ZSET version 2 with doubles stored in binary. */
+#define RDB_TYPE_MODULE 6
+#define RDB_TYPE_MODULE_2 7 /* Module value with annotations for parsing without
+                               the generating module being loaded. */
+/* NOTE: WHEN ADDING NEW RDB TYPE, UPDATE rdbIsObjectType() BELOW */
 
-/* Object types for encoded objects.
- *
- * 对象的编码方式
- */
-#define REDIS_RDB_TYPE_HASH_ZIPMAP    9
-#define REDIS_RDB_TYPE_LIST_ZIPLIST  10
-#define REDIS_RDB_TYPE_SET_INTSET    11
-#define REDIS_RDB_TYPE_ZSET_ZIPLIST  12
-#define REDIS_RDB_TYPE_HASH_ZIPLIST  13
+/* Object types for encoded objects. */
+#define RDB_TYPE_HASH_ZIPMAP    9
+#define RDB_TYPE_LIST_ZIPLIST  10
+#define RDB_TYPE_SET_INTSET    11
+#define RDB_TYPE_ZSET_ZIPLIST  12
+#define RDB_TYPE_HASH_ZIPLIST  13
+#define RDB_TYPE_LIST_QUICKLIST 14
+#define RDB_TYPE_STREAM_LISTPACKS 15
+/* NOTE: WHEN ADDING NEW RDB TYPE, UPDATE rdbIsObjectType() BELOW */
 
-/* Test if a type is an object type.
- *
- * 检查给定类型是否对象
- */
-#define rdbIsObjectType(t) ((t >= 0 && t <= 4) || (t >= 9 && t <= 13))
+/* Test if a type is an object type. */
+#define rdbIsObjectType(t) ((t >= 0 && t <= 7) || (t >= 9 && t <= 15))
 
-/* Special RDB opcodes (saved/loaded with rdbSaveType/rdbLoadType).
- *
- * 数据库特殊操作标识符
- */
-// 以 MS 计算的过期时间
-#define REDIS_RDB_OPCODE_EXPIRETIME_MS 252
-// 以秒计算的过期时间
-#define REDIS_RDB_OPCODE_EXPIRETIME 253
-// 选择数据库
-#define REDIS_RDB_OPCODE_SELECTDB   254
-// 数据库的结尾（但不是 RDB 文件的结尾）
-#define REDIS_RDB_OPCODE_EOF        255
+/* Special RDB opcodes (saved/loaded with rdbSaveType/rdbLoadType). */
+#define RDB_OPCODE_MODULE_AUX 247   /* Module auxiliary data. */
+#define RDB_OPCODE_IDLE       248   /* LRU idle time. */
+#define RDB_OPCODE_FREQ       249   /* LFU frequency. */
+#define RDB_OPCODE_AUX        250   /* RDB aux field. */
+#define RDB_OPCODE_RESIZEDB   251   /* Hash table resize hint. */
+#define RDB_OPCODE_EXPIRETIME_MS 252    /* Expire time in milliseconds. */
+#define RDB_OPCODE_EXPIRETIME 253       /* Old expire time in seconds. */
+#define RDB_OPCODE_SELECTDB   254   /* DB number of the following keys. */
+#define RDB_OPCODE_EOF        255   /* End of the RDB file. */
+
+/* Module serialized values sub opcodes */
+#define RDB_MODULE_OPCODE_EOF   0   /* End of module value. */
+#define RDB_MODULE_OPCODE_SINT  1   /* Signed integer. */
+#define RDB_MODULE_OPCODE_UINT  2   /* Unsigned integer. */
+#define RDB_MODULE_OPCODE_FLOAT 3   /* Float. */
+#define RDB_MODULE_OPCODE_DOUBLE 4  /* Double. */
+#define RDB_MODULE_OPCODE_STRING 5  /* String. */
+
+/* rdbLoad...() functions flags. */
+#define RDB_LOAD_NONE   0
+#define RDB_LOAD_ENC    (1<<0)
+#define RDB_LOAD_PLAIN  (1<<1)
+#define RDB_LOAD_SDS    (1<<2)
+
+#define RDB_SAVE_NONE 0
+#define RDB_SAVE_AOF_PREAMBLE (1<<0)
 
 int rdbSaveType(rio *rdb, unsigned char type);
 int rdbLoadType(rio *rdb);
 int rdbSaveTime(rio *rdb, time_t t);
 time_t rdbLoadTime(rio *rdb);
-int rdbSaveLen(rio *rdb, uint32_t len);
-uint32_t rdbLoadLen(rio *rdb, int *isencoded);
+int rdbSaveLen(rio *rdb, uint64_t len);
+int rdbSaveMillisecondTime(rio *rdb, long long t);
+long long rdbLoadMillisecondTime(rio *rdb, int rdbver);
+uint64_t rdbLoadLen(rio *rdb, int *isencoded);
+int rdbLoadLenByRef(rio *rdb, int *isencoded, uint64_t *lenptr);
 int rdbSaveObjectType(rio *rdb, robj *o);
 int rdbLoadObjectType(rio *rdb);
-int rdbLoad(char *filename);
-int rdbSaveBackground(char *filename);
+int rdbLoad(char *filename, rdbSaveInfo *rsi);
+int rdbSaveBackground(char *filename, rdbSaveInfo *rsi);
+int rdbSaveToSlavesSockets(rdbSaveInfo *rsi);
 void rdbRemoveTempFile(pid_t childpid);
-int rdbSave(char *filename);
-int rdbSaveObject(rio *rdb, robj *o);
-off_t rdbSavedObjectLen(robj *o);
-off_t rdbSavedObjectPages(robj *o);
-robj *rdbLoadObject(int type, rio *rdb);
+int rdbSave(char *filename, rdbSaveInfo *rsi);
+ssize_t rdbSaveObject(rio *rdb, robj *o, robj *key);
+size_t rdbSavedObjectLen(robj *o);
+robj *rdbLoadObject(int type, rio *rdb, robj *key);
 void backgroundSaveDoneHandler(int exitcode, int bysignal);
-int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime, long long now);
+int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime);
+ssize_t rdbSaveSingleModuleAux(rio *rdb, int when, moduleType *mt);
 robj *rdbLoadStringObject(rio *rdb);
+ssize_t rdbSaveStringObject(rio *rdb, robj *obj);
+ssize_t rdbSaveRawString(rio *rdb, unsigned char *s, size_t len);
+void *rdbGenericLoadStringObject(rio *rdb, int flags, size_t *lenptr);
+int rdbSaveBinaryDoubleValue(rio *rdb, double val);
+int rdbLoadBinaryDoubleValue(rio *rdb, double *val);
+int rdbSaveBinaryFloatValue(rio *rdb, float val);
+int rdbLoadBinaryFloatValue(rio *rdb, float *val);
+int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi, int loading_aof);
+rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi);
 
 #endif

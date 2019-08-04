@@ -27,3 +27,5 @@ deps/lua/src/liblua.a
 *.dSYM
 CMakeLists.txt
 cmake-build-debug
+.idea
+/.idea/

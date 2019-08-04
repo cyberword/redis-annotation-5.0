@@ -12,7 +12,10 @@ GROUPS = [
   "connection",
   "server",
   "scripting",
-  "hyperloglog"
+  "hyperloglog",
+  "cluster",
+  "geo",
+  "stream"
 ].freeze
 
 GROUPS_BY_NAME = Hash[*
@@ -50,7 +53,7 @@ def commands
   require "json"
   require "uri"
 
-  url = URI.parse "https://raw.github.com/antirez/redis-doc/master/commands.json"
+  url = URI.parse "https://raw.githubusercontent.com/antirez/redis-doc/master/commands.json"
   client = Net::HTTP.new url.host, url.port
   client.use_ssl = true
   response = client.get url.path

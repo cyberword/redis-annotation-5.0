@@ -146,6 +146,8 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  *              in this condition but just a few.
  *
  * no-monitor:  Do not automatically propagate the command on MONITOR.
+ * 
+ * no-slowlog:  Do not automatically propagate the command to the slowlog.
  *
  * cluster-asking: Perform an implicit ASKING for this command, so the
  *              command will be accepted in cluster mode if the slot is marked
@@ -627,7 +629,7 @@ struct redisCommand redisCommandTable[] = {
      0,NULL,0,0,0,0,0,0},
 
     {"auth",authCommand,-2,
-     "no-script ok-loading ok-stale fast @connection",
+     "no-script ok-loading ok-stale fast no-monitor no-slowlog @connection",
      0,NULL,0,0,0,0,0,0},
 
     /* We don't allow PING during loading since in Redis PING is used as
@@ -670,7 +672,7 @@ struct redisCommand redisCommandTable[] = {
      0,NULL,0,0,0,0,0,0},
 
     {"exec",execCommand,1,
-     "no-script no-monitor @transaction",
+     "no-script no-monitor no-slowlog @transaction",
      0,NULL,0,0,0,0,0,0},
 
     {"discard",discardCommand,1,
@@ -822,7 +824,7 @@ struct redisCommand redisCommandTable[] = {
      0,NULL,0,0,0,0,0,0},
 
     {"hello",helloCommand,-2,
-     "no-script fast @connection",
+     "no-script fast no-monitor no-slowlog @connection",
      0,NULL,0,0,0,0,0,0},
 
     /* EVAL can modify the dataset, however it is not flagged as a write
@@ -1674,10 +1676,12 @@ void clientsCron(void) {
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
-    if (server.active_expire_enabled && server.masterhost == NULL) {
-        activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
-    } else if (server.masterhost != NULL) {
-        expireSlaveKeys();
+    if (server.active_expire_enabled) {
+        if (server.masterhost == NULL) {
+            activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
+        } else {
+            expireSlaveKeys();
+        }
     }
 
     /* Defrag keys gradually. */
@@ -2211,23 +2215,22 @@ void initServerConfig(void) {
     server.timezone = getTimeZone(); /* Initialized by tzset(). */
     server.configfile = NULL;
     server.executable = NULL;
-    /** 设置服务端的执行频率默认设置10,也就是说1000ms执行10次每100ms执行一次 **/
     server.hz = server.config_hz = CONFIG_DEFAULT_HZ;
     server.dynamic_hz = CONFIG_DEFAULT_DYNAMIC_HZ;
     server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
-    server.port = CONFIG_DEFAULT_SERVER_PORT;//默认端口6397
-    server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;//连接队列大小
+    server.port = CONFIG_DEFAULT_SERVER_PORT;
+    server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;
     server.bindaddr_count = 0;
     server.unixsocket = NULL;
     server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
-    server.ipfd_count = 0;//描述符数量
+    server.ipfd_count = 0;
     server.sofd = -1;
     server.protected_mode = CONFIG_DEFAULT_PROTECTED_MODE;
     server.gopher_enabled = CONFIG_DEFAULT_GOPHER_ENABLED;
-    server.dbnum = CONFIG_DEFAULT_DBNUM;//默认一个服务端16个db
-    server.verbosity = CONFIG_DEFAULT_VERBOSITY;//日志级别
-    server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;//最大闲置时间
-    server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;//tcpkeepalive时间
+    server.dbnum = CONFIG_DEFAULT_DBNUM;
+    server.verbosity = CONFIG_DEFAULT_VERBOSITY;
+    server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
+    server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
     server.active_expire_enabled = 1;
     server.active_defrag_enabled = CONFIG_DEFAULT_ACTIVE_DEFRAG;
     server.active_defrag_ignore_bytes = CONFIG_DEFAULT_DEFRAG_IGNORE_BYTES;
@@ -2264,6 +2267,7 @@ void initServerConfig(void) {
     server.aof_flush_postponed_start = 0;
     server.aof_rewrite_incremental_fsync = CONFIG_DEFAULT_AOF_REWRITE_INCREMENTAL_FSYNC;
     server.rdb_save_incremental_fsync = CONFIG_DEFAULT_RDB_SAVE_INCREMENTAL_FSYNC;
+    server.rdb_key_save_delay = CONFIG_DEFAULT_RDB_KEY_SAVE_DELAY;
     server.aof_load_truncated = CONFIG_DEFAULT_AOF_LOAD_TRUNCATED;
     server.aof_use_rdb_preamble = CONFIG_DEFAULT_AOF_USE_RDB_PREAMBLE;
     server.pidfile = NULL;
@@ -2318,7 +2322,7 @@ void initServerConfig(void) {
     server.io_threads_num = CONFIG_DEFAULT_IO_THREADS_NUM;
     server.io_threads_do_reads = CONFIG_DEFAULT_IO_THREADS_DO_READS;
 
-    server.lruclock = getLRUClock();//lru时钟
+    server.lruclock = getLRUClock();
     resetServerSaveParams();
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
@@ -2333,6 +2337,9 @@ void initServerConfig(void) {
     server.cached_master = NULL;
     server.master_initial_offset = -1;
     server.repl_state = REPL_STATE_NONE;
+    server.repl_transfer_tmpfile = NULL;
+    server.repl_transfer_fd = -1;
+    server.repl_transfer_s = -1;
     server.repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
     server.repl_serve_stale_data = CONFIG_DEFAULT_SLAVE_SERVE_STALE_DATA;
     server.repl_slave_ro = CONFIG_DEFAULT_SLAVE_READ_ONLY;
@@ -2341,6 +2348,7 @@ void initServerConfig(void) {
     server.repl_down_since = 0; /* Never connected, repl is down since EVER. */
     server.repl_disable_tcp_nodelay = CONFIG_DEFAULT_REPL_DISABLE_TCP_NODELAY;
     server.repl_diskless_sync = CONFIG_DEFAULT_REPL_DISKLESS_SYNC;
+    server.repl_diskless_load = CONFIG_DEFAULT_REPL_DISKLESS_LOAD;
     server.repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
     server.repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
     server.repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
@@ -2396,6 +2404,9 @@ void initServerConfig(void) {
 
     /* Latency monitor */
     server.latency_monitor_threshold = CONFIG_DEFAULT_LATENCY_MONITOR_THRESHOLD;
+
+    /* Tracking. */
+    server.tracking_table_max_fill = CONFIG_DEFAULT_TRACKING_TABLE_MAX_FILL;
 
     /* Debugging */
     server.assert_failed = "<no assertion failed>";
@@ -2903,6 +2914,8 @@ int populateCommandTableParseFlags(struct redisCommand *c, char *strflags) {
             c->flags |= CMD_STALE;
         } else if (!strcasecmp(flag,"no-monitor")) {
             c->flags |= CMD_SKIP_MONITOR;
+        } else if (!strcasecmp(flag,"no-slowlog")) {
+            c->flags |= CMD_SKIP_SLOWLOG;
         } else if (!strcasecmp(flag,"cluster-asking")) {
             c->flags |= CMD_ASKING;
         } else if (!strcasecmp(flag,"fast")) {
@@ -3187,12 +3200,13 @@ void call(client *c, int flags) {
 
     /* Log the command into the Slow log if needed, and populate the
      * per-command statistics that we show in INFO commandstats. */
-    if (flags & CMD_CALL_SLOWLOG && c->cmd->proc != execCommand) {
+    if (flags & CMD_CALL_SLOWLOG && !(c->cmd->flags & CMD_SKIP_SLOWLOG)) {
         char *latency_event = (c->cmd->flags & CMD_FAST) ?
                               "fast-command" : "command";
         latencyAddSampleIfNeeded(latency_event,duration/1000);
         slowlogPushEntryIfNeeded(c,c->argv,c->argc,duration);
     }
+
     if (flags & CMD_CALL_STATS) {
         /* use the real command that was executed (cmd and lastamc) may be
          * different, in case of MULTI-EXEC or re-written commands such as
@@ -3260,6 +3274,16 @@ void call(client *c, int flags) {
         redisOpArrayFree(&server.also_propagate);
     }
     server.also_propagate = prev_also_propagate;
+
+    /* If the client has keys tracking enabled for client side caching,
+     * make sure to remember the keys it fetched via this command. */
+    if (c->cmd->flags & CMD_READONLY) {
+        client *caller = (c->flags & CLIENT_LUA && server.lua_caller) ?
+                            server.lua_caller : c;
+        if (caller->flags & CLIENT_TRACKING)
+            trackingRememberKeys(caller);
+    }
+
     server.stat_numcommands++;
 }
 
@@ -3326,7 +3350,7 @@ int processCommand(client *c) {
         if (acl_retval == ACL_DENIED_CMD)
             addReplyErrorFormat(c,
                 "-NOPERM this user has no permissions to run "
-                "the '%s' command or its subcommnad", c->cmd->name);
+                "the '%s' command or its subcommand", c->cmd->name);
         else
             addReplyErrorFormat(c,
                 "-NOPERM this user has no permissions to access "
@@ -3383,6 +3407,10 @@ int processCommand(client *c) {
             return C_OK;
         }
     }
+
+    /* Make sure to use a reasonable amount of memory for client side
+     * caching metadata. */
+    if (server.tracking_clients) trackingLimitUsedSlots();
 
     /* Don't accept write commands if there are problems persisting on disk
      * and if this is a master instance. */
@@ -3678,6 +3706,7 @@ void addReplyCommand(client *c, struct redisCommand *cmd) {
         flagcount += addReplyCommandFlag(c,cmd,CMD_LOADING, "loading");
         flagcount += addReplyCommandFlag(c,cmd,CMD_STALE, "stale");
         flagcount += addReplyCommandFlag(c,cmd,CMD_SKIP_MONITOR, "skip_monitor");
+        flagcount += addReplyCommandFlag(c,cmd,CMD_SKIP_SLOWLOG, "skip_slowlog");
         flagcount += addReplyCommandFlag(c,cmd,CMD_ASKING, "asking");
         flagcount += addReplyCommandFlag(c,cmd,CMD_FAST, "fast");
         if ((cmd->getkeys_proc && !(cmd->flags & CMD_MODULE)) ||
@@ -3878,10 +3907,12 @@ sds genRedisInfoString(char *section) {
             "connected_clients:%lu\r\n"
             "client_recent_max_input_buffer:%zu\r\n"
             "client_recent_max_output_buffer:%zu\r\n"
-            "blocked_clients:%d\r\n",
+            "blocked_clients:%d\r\n"
+            "tracking_clients:%d\r\n",
             listLength(server.clients)-listLength(server.slaves),
             maxin, maxout,
-            server.blocked_clients);
+            server.blocked_clients,
+            server.tracking_clients);
     }
 
     /* Memory */
@@ -4041,7 +4072,7 @@ sds genRedisInfoString(char *section) {
             (server.aof_last_write_status == C_OK) ? "ok" : "err",
             server.stat_aof_cow_bytes);
 
-        if (server.aof_state != AOF_OFF) {
+        if (server.aof_enabled) {
             info = sdscatprintf(info,
                 "aof_current_size:%lld\r\n"
                 "aof_base_size:%lld\r\n"
@@ -4121,7 +4152,8 @@ sds genRedisInfoString(char *section) {
             "active_defrag_hits:%lld\r\n"
             "active_defrag_misses:%lld\r\n"
             "active_defrag_key_hits:%lld\r\n"
-            "active_defrag_key_misses:%lld\r\n",
+            "active_defrag_key_misses:%lld\r\n"
+            "tracking_used_slots:%lld\r\n",
             server.stat_numconnections,
             server.stat_numcommands,
             getInstantaneousMetric(STATS_METRIC_COMMAND),
@@ -4147,7 +4179,8 @@ sds genRedisInfoString(char *section) {
             server.stat_active_defrag_hits,
             server.stat_active_defrag_misses,
             server.stat_active_defrag_key_hits,
-            server.stat_active_defrag_key_misses);
+            server.stat_active_defrag_key_misses,
+            trackingGetUsedSlots());
     }
 
     /* Replication */
@@ -4583,7 +4616,7 @@ void loadDataFromDisk(void) {
         }
     }
 }
-/**   OOM的处理函数        **/
+
 void redisOutOfMemoryHandler(size_t allocation_size) {
     serverLog(LL_WARNING,"Out Of Memory allocating %zu bytes!",
         allocation_size);
@@ -4701,11 +4734,7 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
-/**
- * 
- * redis服务端入口
- * 
- * */
+
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
@@ -4724,8 +4753,6 @@ int main(int argc, char **argv) {
             return sha1Test(argc, argv);
         } else if (!strcasecmp(argv[2], "util")) {
             return utilTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "sds")) {
-            return sdsTest(argc, argv);
         } else if (!strcasecmp(argv[2], "endianconv")) {
             return endianconvTest(argc, argv);
         } else if (!strcasecmp(argv[2], "crc64")) {
@@ -4744,7 +4771,7 @@ int main(int argc, char **argv) {
 #endif
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
-    zmalloc_set_oom_handler(redisOutOfMemoryHandler);//设置OOM处理函数
+    zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
 
@@ -4752,7 +4779,7 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();//初始化服务端配置
+    initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
     moduleInitModulesSystem();

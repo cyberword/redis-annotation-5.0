@@ -115,6 +115,34 @@ start_server {tags {"hll"}} {
         set e
     } {*WRONGTYPE*}
 
+    test {Fuzzing dense/sparse encoding: Redis should always detect errors} {
+        for {set j 0} {$j < 1000} {incr j} {
+            r del hll
+            set items {}
+            set numitems [randomInt 3000]
+            for {set i 0} {$i < $numitems} {incr i} {
+                lappend items [expr {rand()}]
+            }
+            r pfadd hll {*}$items
+
+            # Corrupt it in some random way.
+            for {set i 0} {$i < 5} {incr i} {
+                set len [r strlen hll]
+                set pos [randomInt $len]
+                set byte [randstring 1 1 binary]
+                r setrange hll $pos $byte
+                # Don't modify more bytes 50% of times
+                if {rand() < 0.5} break
+            }
+
+            # Use the hyperloglog to check if it crashes
+            # Redis in some way.
+            catch {
+                r pfcount hll
+            }
+        }
+    }
+
     test {PFADD, PFCOUNT, PFMERGE type checking works} {
         r set foo bar
         catch {r pfadd foo 1} e
@@ -136,10 +164,9 @@ start_server {tags {"hll"}} {
         r pfcount hll
     } {5}
 
-    test {PFCOUNT multiple-keys merge returns cardinality of union} {
+    test {PFCOUNT multiple-keys merge returns cardinality of union #1} {
         r del hll1 hll2 hll3
         for {set x 1} {$x < 10000} {incr x} {
-            # Force dense representation of hll2
             r pfadd hll1 "foo-$x"
             r pfadd hll2 "bar-$x"
             r pfadd hll3 "zap-$x"
@@ -151,9 +178,36 @@ start_server {tags {"hll"}} {
         }
     }
 
+    test {PFCOUNT multiple-keys merge returns cardinality of union #2} {
+        r del hll1 hll2 hll3
+        set elements {}
+        for {set x 1} {$x < 10000} {incr x} {
+            for {set j 1} {$j <= 3} {incr j} {
+                set rint [randomInt 20000]
+                r pfadd hll$j $rint
+                lappend elements $rint
+            }
+        }
+        set realcard [llength [lsort -unique $elements]]
+        set card [r pfcount hll1 hll2 hll3]
+        set err [expr {abs($card-$realcard)}]
+        assert {$err < (double($card)/100)*5}
+    }
+
     test {PFDEBUG GETREG returns the HyperLogLog raw registers} {
         r del hll
         r pfadd hll 1 2 3
         llength [r pfdebug getreg hll]
     } {16384}
+
+    test {PFADD / PFCOUNT cache invalidation works} {
+        r del hll
+        r pfadd hll a b c
+        r pfcount hll
+        assert {[r getrange hll 15 15] eq "\x00"}
+        r pfadd hll a b c
+        assert {[r getrange hll 15 15] eq "\x00"}
+        r pfadd hll 1 2 3
+        assert {[r getrange hll 15 15] eq "\x80"}
+    }
 }

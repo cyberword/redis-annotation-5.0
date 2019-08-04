@@ -1,6 +1,8 @@
 set ::num_tests 0
 set ::num_passed 0
 set ::num_failed 0
+set ::num_skipped 0
+set ::num_aborted 0
 set ::tests_failed {}
 
 proc fail {msg} {
@@ -19,9 +21,12 @@ proc assert_match {pattern value} {
     }
 }
 
-proc assert_equal {expected value} {
+proc assert_equal {expected value {detail ""}} {
     if {$expected ne $value} {
-        error "assertion:Expected '$value' to be equal to '$expected'"
+        if {$detail ne ""} {
+            set detail " (detail: $detail)"
+        }
+        error "assertion:Expected '$value' to be equal to '$expected'$detail"
     }
 }
 
@@ -29,18 +34,12 @@ proc assert_error {pattern code} {
     if {[catch {uplevel 1 $code} error]} {
         assert_match $pattern $error
     } else {
-        error "assertion:Expected an error but nothing was catched"
+        error "assertion:Expected an error but nothing was caught"
     }
 }
 
 proc assert_encoding {enc key} {
-    # Swapped out values don't have an encoding, so make sure that
-    # the value is swapped in before checking the encoding.
     set dbg [r debug object $key]
-    while {[string match "* swapped at:*" $dbg]} {
-        r debug swapin $key
-        set dbg [r debug object $key]
-    }
     assert_match "* encoding:$enc *" $dbg
 }
 
@@ -71,8 +70,24 @@ proc test {name code {okpattern undefined}} {
     # abort if tagged with a tag to deny
     foreach tag $::denytags {
         if {[lsearch $::tags $tag] >= 0} {
+            incr ::num_aborted
+            send_data_packet $::test_server_fd ignore $name
             return
         }
+    }
+
+    # abort if test name in skiptests
+    if {[lsearch $::skiptests $name] >= 0} {
+        incr ::num_skipped
+        send_data_packet $::test_server_fd skip $name
+        return
+    }
+
+    # abort if test name in skiptests
+    if {[llength $::only_tests] > 0 && [lsearch $::only_tests $name] < 0} {
+        incr ::num_skipped
+        send_data_packet $::test_server_fd skip $name
+        return
     }
 
     # check if tagged with at least 1 tag to allow when there *is* a list
@@ -85,6 +100,8 @@ proc test {name code {okpattern undefined}} {
             }
         }
         if {$matched < 1} {
+            incr ::num_aborted
+            send_data_packet $::test_server_fd ignore $name
             return
         }
     }
