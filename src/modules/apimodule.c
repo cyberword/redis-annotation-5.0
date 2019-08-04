@@ -22,7 +22,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
         printf("Module loaded with ARGV[%d] = %s\n", j, s);
     }
 
-    if (RedisModule_CreateCommand(ctx,"RedisModule_Milliseconds",redisModule_Milliseconds, "readonly",0,0,0) == REDISMODULE_ERR){
+    if (RedisModule_CreateCommand(ctx,"api_RedisModule_Milliseconds",redisModule_Milliseconds, "readonly",0,0,0) == REDISMODULE_ERR){
         return REDISMODULE_ERR;
     }
 
