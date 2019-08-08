@@ -21,7 +21,7 @@ int redisModule_StringPtrLen(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 /** 创建module string */
 int redisModule_CreateString(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
     RedisModuleString *str = RedisModule_CreateString(ctx, *argv, sizeof(*argv));
-    RedisModule_ReplyWithLongLong(sizeof(str));
+    RedisModule_ReplyWithLongLong(ctx, sizeof(str));
     RedisModule_Free(str);
     return REDISMODULE_OK;
 }
