@@ -30,11 +30,12 @@ int redisModule_CreateString(RedisModuleCtx *ctx, RedisModuleString **argv, int 
     return REDISMODULE_OK;
 }
 
-
+/** 获取键类型  */
 int redisModule_OpenKey(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
     REDISMODULE_NOT_USED(argc);
     RedisModuleKey *key = RedisModule_OpenKey(ctx, *argv, REDISMODULE_READ);
-    RedisModule_ReplyWithString(ctx, key);
+    int type = RedisModule_KeyType(key);
+    RedisModule_ReplyWithLongLong(ctx, type);
     return REDISMODULE_OK;
 }
 
