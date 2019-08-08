@@ -6,6 +6,8 @@
 
 /** 获取时间 */
 int redisModule_Milliseconds(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+    REDISMODULE_NOT_USED(argc);
+    REDISMODULE_NOT_USED(argv);
     long long millSeconds = RedisModule_Milliseconds();
     printf("RedisModule_Milliseconds $hd", millSeconds);
     RedisModule_ReplyWithLongLong(ctx, millSeconds);
@@ -13,6 +15,7 @@ int redisModule_Milliseconds(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 }
 /** 获取截止字符串 */
 int redisModule_StringPtrLen(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+    REDISMODULE_NOT_USED(argc);
     const char *str = RedisModule_StringPtrLen(*argv, 1);
     RedisModule_ReplyWithString(ctx, str);
     return REDISMODULE_OK;
@@ -20,6 +23,7 @@ int redisModule_StringPtrLen(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 
 /** 创建module string */
 int redisModule_CreateString(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+    REDISMODULE_NOT_USED(argc);
     RedisModuleString *str = RedisModule_CreateString(ctx, *argv, sizeof(*argv));
     RedisModule_ReplyWithLongLong(ctx, sizeof(str));
     RedisModule_Free(str);
