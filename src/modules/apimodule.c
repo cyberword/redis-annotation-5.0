@@ -33,7 +33,7 @@ int redisModule_CreateString(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 
 int redisModule_OpenKey(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
     REDISMODULE_NOT_USED(argc);
-    RedisModule_Key *key = RedisModule_OpenKey(ctx, *argv, REDISMODULE_READ);
+    RedisModuleKey *key = RedisModule_OpenKey(ctx, *argv, REDISMODULE_READ);
     RedisModule_ReplyWithString(ctx, key);
     return REDISMODULE_OK;
 }
