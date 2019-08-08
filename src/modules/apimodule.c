@@ -31,6 +31,15 @@ int redisModule_CreateString(RedisModuleCtx *ctx, RedisModuleString **argv, int 
 }
 
 
+int redisModule_OpenKey(RedisModuleCtx *ctx, RedisModuleString **argv, int argc){
+    REDISMODULE_NOT_USED(argc);
+    RedisModule_Key *key = RedisModule_OpenKey(ctx, *argv, REDISMODULE_READ);
+    RedisModule_ReplyWithString(ctx, key);
+    return REDISMODULE_OK;
+}
+
+
+
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     if (RedisModule_Init(ctx, "module_test", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR){
         return REDISMODULE_ERR;
@@ -51,6 +60,11 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     }
 
     if (RedisModule_CreateCommand(ctx,"api_RedisModule_CreateString",redisModule_CreateString, "readonly",1,1,1) == REDISMODULE_ERR){
+        return REDISMODULE_ERR;
+    }
+
+
+    if (RedisModule_CreateCommand(ctx,"api_RedisModule_OpenKey",redisModule_OpenKey, "readonly",1,1,1) == REDISMODULE_ERR){
         return REDISMODULE_ERR;
     }
 
