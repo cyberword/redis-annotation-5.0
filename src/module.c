@@ -5099,7 +5099,7 @@ dictType moduleAPIDictType = {
 int moduleRegisterApi(const char *funcname, void *funcptr) {
     return dictAdd(server.moduleapi, (char*)funcname, funcptr);
 }
-
+/** Module mapping   例如 RedisModule_ReplyWithArray 与 RM_ReplyWithArray做映射    */
 #define REGISTER_API(name) \
     moduleRegisterApi("RedisModule_" #name, (void *)(unsigned long)RM_ ## name)
 
@@ -5197,17 +5197,21 @@ void moduleUnregisterCommands(struct RedisModule *module) {
 }
 
 /* Load a module and initialize it. On success C_OK is returned, otherwise
- * C_ERR is returned. */
+ * C_ERR is returned.
+ * 加载module库
+ * */
 int moduleLoad(const char *path, void **module_argv, int module_argc) {
     int (*onload)(void *, void **, int);
     void *handle;
+    //初始化模块context结构 主要设置RM_GetApi函数指针
     RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
-
+    //dlopen 根据路径加载库
     handle = dlopen(path,RTLD_NOW|RTLD_LOCAL);
     if (handle == NULL) {
         serverLog(LL_WARNING, "Module %s failed to load: %s", path, dlerror());
         return C_ERR;
     }
+    //获取库函数指定的加载函数指针
     onload = (int (*)(void *, void **, int))(unsigned long) dlsym(handle,"RedisModule_OnLoad");
     if (onload == NULL) {
         dlclose(handle);
@@ -5216,6 +5220,7 @@ int moduleLoad(const char *path, void **module_argv, int module_argc) {
             "symbol. Module not loaded.",path);
         return C_ERR;
     }
+    //module function onload
     if (onload((void*)&ctx,module_argv,module_argc) == REDISMODULE_ERR) {
         if (ctx.module) {
             moduleUnregisterCommands(ctx.module);
@@ -5369,7 +5374,10 @@ size_t moduleCount(void) {
 }
 
 /* Register all the APIs we export. Keep this function at the end of the
- * file so that's easy to seek it to add new entries. */
+ * file so that's easy to seek it to add new entries.
+ *
+ * 注册将moudleapi与函数定义做键值映射
+ * */
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     server.sharedapi = dictCreate(&moduleAPIDictType,NULL);
