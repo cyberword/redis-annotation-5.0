@@ -732,6 +732,7 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
     cp->rediscmd->keystep = keystep;
     cp->rediscmd->microseconds = 0;
     cp->rediscmd->calls = 0;
+    //注册命令
     dictAdd(server.commands,sdsdup(cmdname),cp->rediscmd);
     dictAdd(server.orig_commands,sdsdup(cmdname),cp->rediscmd);
     cp->rediscmd->id = ACLGetCommandID(cmdname); /* ID used for ACL. */
@@ -5107,7 +5108,9 @@ int moduleRegisterApi(const char *funcname, void *funcptr) {
 void moduleRegisterCoreAPI(void);
 
 void moduleInitModulesSystem(void) {
+    //unblockedClient
     moduleUnblockedClients = listCreate();
+    //用于加载指定模块的队列
     server.loadmodule_queue = listCreate();
     modules = dictCreate(&modulesDictType,NULL);
 
@@ -5119,7 +5122,7 @@ void moduleInitModulesSystem(void) {
 
     /* Set up filter list */
     moduleCommandFilters = listCreate();
-
+    //注册api
     moduleRegisterCoreAPI();
     if (pipe(server.module_blocked_pipe) == -1) {
         serverLog(LL_WARNING,
@@ -5156,6 +5159,7 @@ void moduleLoadFromQueue(void) {
     listRewind(server.loadmodule_queue,&li);
     while((ln = listNext(&li))) {
         struct moduleLoadQueueEntry *loadmod = ln->value;
+        //模块加载
         if (moduleLoad(loadmod->path,(void **)loadmod->argv,loadmod->argc)
             == C_ERR)
         {
@@ -5376,11 +5380,13 @@ size_t moduleCount(void) {
 /* Register all the APIs we export. Keep this function at the end of the
  * file so that's easy to seek it to add new entries.
  *
- * 注册将moudleapi与函数定义做键值映射
+ * 注册将moduleapi与函数定义做键值映射
  * */
 void moduleRegisterCoreAPI(void) {
+    //创建模块api字典
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     server.sharedapi = dictCreate(&moduleAPIDictType,NULL);
+    //REGISTER_API 将函数名与集体函数做mapping映射
     REGISTER_API(Alloc);
     REGISTER_API(Calloc);
     REGISTER_API(Realloc);
