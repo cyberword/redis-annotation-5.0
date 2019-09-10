@@ -45,7 +45,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     if (RedisModule_Init(ctx, "module_test", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR){
         return REDISMODULE_ERR;
     }
-
+    //这也解释了为什么moduleapi函数只有在module.h中但是找不到同函数名的实现, 原因是redis通过字典来维护了这层函数关系
     /* Log the list of parameters passing loading the module. */
     for (int j = 0; j < argc; j++) {
         const char *s = RedisModule_StringPtrLen(argv[j],NULL);

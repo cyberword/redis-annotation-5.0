@@ -4782,6 +4782,7 @@ int main(int argc, char **argv) {
     initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
                   basic networking code and client creation depends on it. */
+    //初始化模块 加载动态链接库
     moduleInitModulesSystem();
 
     /* Store the executable path and arguments in a safe place in order
