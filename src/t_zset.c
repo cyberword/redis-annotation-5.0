@@ -84,6 +84,7 @@ zskiplist *zslCreate(void) {
     zsl = zmalloc(sizeof(*zsl));
     zsl->level = 1;
     zsl->length = 0;
+    //设置头结点 levels初始化为64个
     zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
     for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
         zsl->header->level[j].forward = NULL;
@@ -1357,6 +1358,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int *flags, double *newscore) {
             /* Optimize: check if the element is too large or the list
              * becomes too long *before* executing zzlInsert. */
             zobj->ptr = zzlInsert(zobj->ptr,ele,score);
+            //压缩队列长度超过64转换为跳表
             if (zzlLength(zobj->ptr) > server.zset_max_ziplist_entries ||
                 sdslen(ele) > server.zset_max_ziplist_value)
                 zsetConvert(zobj,OBJ_ENCODING_SKIPLIST);
@@ -1531,6 +1533,7 @@ long zsetRank(robj *zobj, sds ele, int reverse) {
 /* This generic command implements both ZADD and ZINCRBY. */
 void zaddGenericCommand(client *c, int flags) {
     static char *nanerr = "resulting score is not a number (NaN)";
+    //获取key
     robj *key = c->argv[1];
     robj *zobj;
     sds ele;
@@ -1547,12 +1550,17 @@ void zaddGenericCommand(client *c, int flags) {
 
     /* Parse options. At the end 'scoreidx' is set to the argument position
      * of the score of the first score-element pair. */
+    //score索引数
     scoreidx = 2;
     while(scoreidx < c->argc) {
         char *opt = c->argv[scoreidx]->ptr;
+        //nx只添加不存在的key
         if (!strcasecmp(opt,"nx")) flags |= ZADD_NX;
+        //xx 只添加存在的key
         else if (!strcasecmp(opt,"xx")) flags |= ZADD_XX;
+        //返回影响个数
         else if (!strcasecmp(opt,"ch")) flags |= ZADD_CH;
+        //增加分数
         else if (!strcasecmp(opt,"incr")) flags |= ZADD_INCR;
         else break;
         scoreidx++;
@@ -1564,7 +1572,7 @@ void zaddGenericCommand(client *c, int flags) {
     int xx = (flags & ZADD_XX) != 0;
     int ch = (flags & ZADD_CH) != 0;
 
-    /* After the options, we expect to have an even number of args, since
+    /* After the options, we expect to have an even number of args, since  set jin xx 30  run
      * we expect any number of score-element pairs. */
     elements = c->argc-scoreidx;
     if (elements % 2 || !elements) {
@@ -1599,7 +1607,7 @@ void zaddGenericCommand(client *c, int flags) {
     zobj = lookupKeyWrite(c->db,key);
     if (zobj == NULL) {
         if (xx) goto reply_to_client; /* No key + XX option: nothing to do. */
-        if (server.zset_max_ziplist_entries == 0 ||
+        if (server.zset_max_ziplist_entries == 0 ||//队列超过64个则使用zset否则使用压缩队列
             server.zset_max_ziplist_value < sdslen(c->argv[scoreidx+1]->ptr))
         {
             zobj = createZsetObject();
