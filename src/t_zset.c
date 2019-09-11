@@ -82,6 +82,7 @@ zskiplist *zslCreate(void) {
     zskiplist *zsl;
 
     zsl = zmalloc(sizeof(*zsl));
+    //初级level设置为1
     zsl->level = 1;
     zsl->length = 0;
     //设置头结点 levels初始化为64个
@@ -136,10 +137,13 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     int i, level;
 
     serverAssert(!isnan(score));
+    //x指定为header
     x = zsl->header;
+    //zsl->level为当前zsl的最高level, 最差情况遍历64次
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        //循环过程中要插入的ele的score小于当前forward的话, level降级处理
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
                     (x->level[i].forward->score == score &&
@@ -150,10 +154,13 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         update[i] = x;
     }
+    //确定要添加的元素不在跳跃表内部, 重复添加相同元素的场景不应该存在, 确保调用之前通过dict查看
+    //元素是否已经存在
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    //随机设置一个level 最大为64
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
@@ -163,7 +170,9 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         zsl->level = level;
     }
+    //x指定为新建的node
     x = zslCreateNode(level,score,ele);
+    //更新新增节点多个level下的关系
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
@@ -177,12 +186,14 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
-
+    //update[0]为距离新增node最近的节点, 如果为header置为null
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
     if (x->level[0].forward)
         x->level[0].forward->backward = x;
     else
+        //最后一个节点则设置tail
         zsl->tail = x;
+    //长度+1
     zsl->length++;
     return x;
 }
@@ -1401,6 +1412,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int *flags, double *newscore) {
 
             /* Remove and re-insert when score changes. */
             if (score != curscore) {
+                //分数变动做删除更新操作
                 znode = zslUpdateScore(zs->zsl,curscore,ele,score);
                 /* Note that we did not removed the original element from
                  * the hash table representing the sorted set, so we just
@@ -1411,6 +1423,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int *flags, double *newscore) {
             return 1;
         } else if (!xx) {
             ele = sdsdup(ele);
+            //新的ele添加
             znode = zslInsert(zs->zsl,score,ele);
             serverAssert(dictAdd(zs->dict,ele,&znode->score) == DICT_OK);
             *flags |= ZADD_ADDED;
@@ -1609,7 +1622,7 @@ void zaddGenericCommand(client *c, int flags) {
             != C_OK) goto cleanup;
     }
 
-    /* Lookup the key and create the sorted set if does not exist. */
+    /* Lookup the key and create the sorted set if does not exist.  zadd key  100  jin    */
     zobj = lookupKeyWrite(c->db,key);
     if (zobj == NULL) {
         if (xx) goto reply_to_client; /* No key + XX option: nothing to do. */
@@ -1634,6 +1647,7 @@ void zaddGenericCommand(client *c, int flags) {
         int retflags = flags;
 
         ele = c->argv[scoreidx+1+j*2]->ptr;
+        //添加元素
         int retval = zsetAdd(zobj, score, ele, &retflags, &newscore);
         if (retval == 0) {
             addReplyError(c,nanerr);
@@ -2505,6 +2519,7 @@ void zrangeGenericCommand(client *c, int reverse) {
         sds ele;
 
         /* Check if starting point is trivial, before doing log(N) lookup. */
+        //通过排名找到指定的start元素
         if (reverse) {
             ln = zsl->tail;
             if (start > 0)
@@ -2514,7 +2529,7 @@ void zrangeGenericCommand(client *c, int reverse) {
             if (start > 0)
                 ln = zslGetElementByRank(zsl,start+1);
         }
-
+        //根据range返回
         while(rangelen--) {
             serverAssertWithInfo(c,zobj,ln != NULL);
             ele = ln->ele;
