@@ -252,6 +252,8 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
  *
  * Note that this function attempts to just update the node, in case after
  * the score update, the node would be exactly at the same position.
+ *
+ * 调表更改是基于删除重复添加操作
  * Otherwise the skiplist is modified by removing and re-adding a new
  * element, which is more costly.
  *
@@ -1377,19 +1379,23 @@ int zsetAdd(robj *zobj, double score, sds ele, int *flags, double *newscore) {
         de = dictFind(zs->dict,ele);
         if (de != NULL) {
             /* NX? Return, same element already exists. */
+            //nx直接返回
             if (nx) {
                 *flags |= ZADD_NOP;
                 return 1;
             }
+            //获取当前分数
             curscore = *(double*)dictGetVal(de);
 
             /* Prepare the score for the increment if needed. */
+            //incr 增加当前分数
             if (incr) {
                 score += curscore;
                 if (isnan(score)) {
                     *flags |= ZADD_NAN;
                     return 0;
                 }
+                //设置新的分数
                 if (newscore) *newscore = score;
             }
 
